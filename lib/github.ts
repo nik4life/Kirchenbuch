@@ -1,0 +1,3 @@
+const owner="nik4life",repo="Kirchenbuch";
+export function gh(path:string,init:RequestInit={}){const token=process.env.GITHUB_TOKEN;if(!token)throw new Error("GITHUB_TOKEN ist in Vercel nicht gesetzt.");return fetch("https://api.github.com"+path,{...init,headers:{"Accept":"application/vnd.github+json","Authorization":"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json",...(init.headers||{})},cache:"no-store"})}
+export const base="/repos/"+owner+"/"+repo;
