@@ -85,7 +85,7 @@ def download(urls,folder,delay):
 def one(browser,bid,root,delay,images_only):
  c=BANDS[bid];folder=root/c["slug"];page=browser.new_page()
  print("\n"+c["title"]);enter(page,c["url"]);urls=collect(page);page.close()
- if not urls:\n  debug=folder/"debug";debug.mkdir(parents=True,exist_ok=True)\n  (debug/"url.txt").write_text(page.url if not page.is_closed() else "page closed",encoding="utf-8") if False else None\n  raise RuntimeError("Keine Download-Links gefunden. Siehe Workflow-Log fuer PERMALINK_FINAL/VIEWER_URL.")
+ if not urls: raise RuntimeError("Keine Download-Links gefunden. Siehe Workflow-Log fuer PERMALINK_FINAL/VIEWER_URL.")
  print(f"{len(urls)} Digitalisate erkannt");imgs=download(urls,folder,delay)
  if not images_only:
   pdf=root/(c["slug"]+".pdf");pdf.write_bytes(img2pdf.convert([str(x) for x in imgs]));print("PDF:",pdf)
