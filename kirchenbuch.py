@@ -25,13 +25,13 @@ def dlurl(u):
  return u if q.get("id") and q.get("bilddatei") else None
 
 def enter(page,url):
- page.goto(url,wait_until="domcontentloaded");page.wait_for_timeout(1200)
+ page.goto(url,wait_until="domcontentloaded");page.wait_for_timeout(1200); print("PERMALINK_FINAL", page.url)
  for i in range(page.locator("a").count()):
   a=page.locator("a").nth(i)
   try:
    t=(a.inner_text() or "").lower();h=a.get_attribute("href") or ""
    if "archivalien-viewer" in t or "bild_zoom" in h or "ofs21" in h:
-    page.goto(urljoin(page.url,h),wait_until="domcontentloaded");page.wait_for_timeout(1200);return
+    page.goto(urljoin(page.url,h),wait_until="domcontentloaded");page.wait_for_timeout(1200); print("VIEWER_URL", page.url); return
   except Exception: pass
  if "ofs21" not in page.url: raise RuntimeError("Archivalien-Viewer-Link nicht gefunden")
 
@@ -85,7 +85,7 @@ def download(urls,folder,delay):
 def one(browser,bid,root,delay,images_only):
  c=BANDS[bid];folder=root/c["slug"];page=browser.new_page()
  print("\n"+c["title"]);enter(page,c["url"]);urls=collect(page);page.close()
- if not urls: raise RuntimeError("Keine Download-Links gefunden. Bitte mit --headed testen.")
+ if not urls:\n  debug=folder/"debug";debug.mkdir(parents=True,exist_ok=True)\n  (debug/"url.txt").write_text(page.url if not page.is_closed() else "page closed",encoding="utf-8") if False else None\n  raise RuntimeError("Keine Download-Links gefunden. Siehe Workflow-Log fuer PERMALINK_FINAL/VIEWER_URL.")
  print(f"{len(urls)} Digitalisate erkannt");imgs=download(urls,folder,delay)
  if not images_only:
   pdf=root/(c["slug"]+".pdf");pdf.write_bytes(img2pdf.convert([str(x) for x in imgs]));print("PDF:",pdf)
