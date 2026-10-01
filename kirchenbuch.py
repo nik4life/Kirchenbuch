@@ -10,7 +10,7 @@ BANDS={
 "918":{"title":"Stollhofen katholisch - Geburten 1804-1835","url":"https://www.landesarchiv-bw.de/plink/?f=4-1120124","slug":"918_Geburten_1804-1835"},
 "919":{"title":"Stollhofen katholisch - Geburten 1836-1869","url":"https://www.landesarchiv-bw.de/plink/?f=4-1120125","slug":"919_Geburten_1836-1869"},
 "920":{"title":"Stollhofen katholisch - Heiraten 1809-1870","url":"https://www.landesarchiv-bw.de/plink/?f=4-1120126","slug":"920_Heiraten_1809-1870"},
-"921":{"title":"Stollhofen katholisch - Sterbefaelle 1809-1870","url":"https://www.landesarchiv-bw.de/plink/?f=4-1120127","slug":"921_Sterbefaelle_1809-1870"}}
+"921":{"title":"Stollhofen katholisch - Sterbefaelle 1809-1870","url":"https://www.landesarchiv-bw.de/plink/?f=4-1120127","slug":"921_Sterbefaelle_1809-1870","bestand":"12390","id":"2556102"}}
 DOWNLOAD_RE=re.compile(r"/ofs21/bild_zoom/download\.php",re.I)
 
 def args():
@@ -57,6 +57,30 @@ def collect(page):
   except Exception: break
  return found
 
+def direct_urls(c):
+ bestand=c.get("bestand"); image_id=c.get("id")
+ if not bestand or not image_id: return []
+ base="https://www2.landesarchiv-bw.de/ofs21/bild_zoom/"
+ thumb=f"{base}thumbnails.php?bestand={bestand}&id={image_id}&syssuche=&logik=und"
+ r=requests.get(thumb,headers={"User-Agent":"Mozilla/5.0 Kirchenbuch private genealogy research"},timeout=60)
+ print("THUMBNAILS",r.status_code,r.url,"bytes",len(r.content))
+ r.raise_for_status(); html=r.text
+ names=[]
+ # OFS21 thumbnail pages link each scan through zoom.php?…&gewaehlteSeite=DATEI
+ for raw in re.findall(r"(?:gewaehlteSeite|bilddatei)=([^&\"'<> ]+)",html,re.I):
+  from urllib.parse import unquote
+  name=unquote(raw.replace("&amp;","&"))
+  if name not in names: names.append(name)
+ if not names:
+  # Fallback: extract image filenames occurring in JS/HTML.
+  for name in re.findall(r"([A-Za-z0-9_.-]+\.(?:jpe?g|png|tiff?|webp))",html,re.I):
+   if name not in names: names.append(name)
+ print("DIRECT_FILES",len(names),names[:3],names[-3:] if names else [])
+ if not names:
+  print("THUMBNAIL_HTML_START",re.sub(r"\\s+"," ",html[:2000]))
+  return []
+ return [f"{base}download.php?id={image_id}&bilddatei={name}" for name in names]
+
 def ext(r,u):
  c=(r.headers.get("content-type") or "").lower()
  if "png" in c:return ".png"
@@ -84,7 +108,7 @@ def download(urls,folder,delay):
 
 def one(browser,bid,root,delay,images_only):
  c=BANDS[bid];folder=root/c["slug"];page=browser.new_page()
- print("\n"+c["title"]);enter(page,c["url"]);urls=collect(page);page.close()
+ print("\n"+c["title"]);urls=direct_urls(c)\n if not urls:\n  enter(page,c["url"]);urls=collect(page)\n page.close()
  if not urls: raise RuntimeError("Keine Download-Links gefunden. Siehe Workflow-Log fuer PERMALINK_FINAL/VIEWER_URL.")
  print(f"{len(urls)} Digitalisate erkannt");imgs=download(urls,folder,delay)
  if not images_only:
