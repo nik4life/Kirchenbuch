@@ -1,7 +1,7 @@
 from __future__ import annotations
 import argparse, json, re, time
 from pathlib import Path
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin, urlparse, parse_qs, unquote
 import img2pdf, requests
 from PIL import Image
 from playwright.sync_api import sync_playwright
@@ -61,24 +61,35 @@ def direct_urls(c):
  bestand=c.get("bestand"); image_id=c.get("id")
  if not bestand or not image_id: return []
  base="https://www2.landesarchiv-bw.de/ofs21/bild_zoom/"
- thumb=f"{base}thumbnails.php?bestand={bestand}&id={image_id}&syssuche=&logik=und"
- r=requests.get(thumb,headers={"User-Agent":"Mozilla/5.0 Kirchenbuch private genealogy research"},timeout=60)
- print("THUMBNAILS",r.status_code,r.url,"bytes",len(r.content))
- r.raise_for_status(); html=r.text
- names=[]
- # OFS21 thumbnail pages link each scan through zoom.php?…&gewaehlteSeite=DATEI
- for raw in re.findall(r"(?:gewaehlteSeite|bilddatei)=([^&\"'<> ]+)",html,re.I):
-  from urllib.parse import unquote
-  name=unquote(raw.replace("&amp;","&"))
-  if name not in names: names.append(name)
- if not names:
-  # Fallback: extract image filenames occurring in JS/HTML.
-  for name in re.findall(r"([A-Za-z0-9_.-]+\.(?:jpe?g|png|tiff?|webp))",html,re.I):
-   if name not in names: names.append(name)
- print("DIRECT_FILES",len(names),names[:3],names[-3:] if names else [])
- if not names:
-  print("THUMBNAIL_HTML_START",re.sub(r"\\s+"," ",html[:2000]))
-  return []
+ first=f"{base}thumbnails.php?bestand={bestand}&id={image_id}&syssuche=&logik=und"
+ session=requests.Session()
+ session.headers["User-Agent"]="Mozilla/5.0 Kirchenbuch private genealogy research"
+ queue=[first]; seen_pages=set(); names=[]; seen_names=set()
+ while queue:
+  url=queue.pop(0)
+  if url in seen_pages: continue
+  seen_pages.add(url)
+  r=session.get(url,timeout=60); r.raise_for_status(); html=r.text
+  print("THUMBNAILS_PAGE",len(seen_pages),r.status_code,r.url,"bytes",len(r.content))
+  for raw in re.findall(r"(?:gewaehlteSeite|bilddatei)=([^&\"'<> ]+)",html,re.I):
+   name=unquote(raw.replace("&amp;","&"))
+   if name not in seen_names:
+    seen_names.add(name); names.append(name)
+  if not names:
+   for name in re.findall(r"([A-Za-z0-9_.-]+\\.(?:jpe?g|png|tiff?|webp))",html,re.I):
+    if name not in seen_names:
+     seen_names.add(name); names.append(name)
+  # OFS21 exposes the thumbnail pagination as links back to thumbnails.php.
+  for href in re.findall(r'href=[\"\\\']([^\"\\\']*thumbnails\\.php[^\"\\\']*)[\"\\\']',html,re.I):
+   href=href.replace("&amp;","&")
+   nxt=urljoin(r.url,href)
+   q=parse_qs(urlparse(nxt).query)
+   if q.get("bestand",[bestand])[0] != bestand: continue
+   if q.get("id",[image_id])[0] != image_id: continue
+   if nxt not in seen_pages and nxt not in queue: queue.append(nxt)
+  if len(seen_pages)>1000: raise RuntimeError("Thumbnail-Pagination laeuft unerwartet weiter.")
+ print("THUMBNAIL_PAGES",len(seen_pages),"DIRECT_FILES",len(names),names[:3],names[-3:] if names else [])
+ if not names: return []
  return [f"{base}download.php?id={image_id}&bilddatei={name}" for name in names]
 
 def ext(r,u):
